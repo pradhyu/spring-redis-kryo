@@ -1,6 +1,9 @@
 spring:
   application:
     name: spring-boot-kryo-lettuce
+  threads:
+    virtual:
+      enabled: true
   data:
     redis:
       host: ${REDIS_HOST:localhost}

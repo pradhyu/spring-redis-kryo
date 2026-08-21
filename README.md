@@ -1,6 +1,6 @@
-# Spring Boot + Lettuce + Kryo Serialization
+# Spring Boot 4 + Lettuce + Kryo Serialization
 
-A production-ready Spring Boot application demonstrating high-performance Redis integration with **Lettuce** and **Kryo 5** binary serialization.
+A production-ready **Spring Boot 4.1.1** (Spring Framework 7) application demonstrating high-performance Redis integration with **Lettuce** and **Kryo 5** binary serialization, with native **Virtual Threads** enabled.
 
 ---
 

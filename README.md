@@ -104,3 +104,4 @@ Once the application is running on `http://localhost:8080`:
             └── LettuceKryoIntegrationTest.java# Live Redis integration tests
 ```
 # spring-redis-kryo
+# spring-redis-kryo

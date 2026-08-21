@@ -1,0 +1,8 @@
+flowchart TD
+    A[Spring Boot 4 / Java 21 Loom] --> B[LettuceKryoDirectService]
+    B --> C[StatefulRedisConnection]
+    C --> D[KryoRedisCodec]
+    D <-->|1. Leases Kryo / Serializes| E[KryoPoolHolder]
+    E --> F[Kryo 5 Whitelist IDs 10..69]
+    D <-->|2. Streams Direct ByteBuffer| G[Netty ByteBuf Pipeline]
+    G <-->|3. TCP Socket Framing| H[Redis Server :6379]

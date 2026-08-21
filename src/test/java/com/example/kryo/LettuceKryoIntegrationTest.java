@@ -4,7 +4,6 @@ import com.example.kryo.model.Order;
 import com.example.kryo.model.OrderItem;
 import com.example.kryo.model.UserProfile;
 import com.example.kryo.service.LettuceKryoDirectService;
-import com.example.kryo.service.SpringDataRedisKryoService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,12 +25,9 @@ public class LettuceKryoIntegrationTest {
     @Autowired
     private LettuceKryoDirectService lettuceKryoService;
 
-    @Autowired
-    private SpringDataRedisKryoService springKryoService;
-
     @Test
-    @DisplayName("Test direct Lettuce client: Store and retrieve UserProfile using Kryo")
-    void testDirectLettuceStoreAndRetrieve() {
+    @DisplayName("Test direct Lettuce client: Synchronous store and retrieve UserProfile using Kryo")
+    void testDirectLettuceStoreAndRetrieveUser() {
         String key = "test:lettuce:user:" + UUID.randomUUID();
         UserProfile user = new UserProfile(
                 999L,
@@ -43,14 +39,14 @@ public class LettuceKryoIntegrationTest {
                 Instant.now()
         );
 
-        // 1. Store via Lettuce
+        // 1. Store via Direct Lettuce
         String setResult = lettuceKryoService.set(key, user);
         assertEquals("OK", setResult);
 
         // 2. Verify exists
         assertTrue(lettuceKryoService.exists(key));
 
-        // 3. Retrieve via Lettuce
+        // 3. Retrieve via Direct Lettuce
         UserProfile retrieved = lettuceKryoService.get(key, UserProfile.class);
         assertNotNull(retrieved);
         assertEquals(user, retrieved);
@@ -68,39 +64,40 @@ public class LettuceKryoIntegrationTest {
     }
 
     @Test
-    @DisplayName("Test Spring Data RedisTemplate: Store and retrieve Order using Kryo")
-    void testSpringDataRedisStoreAndRetrieve() {
-        String key = "test:spring:order:" + UUID.randomUUID();
+    @DisplayName("Test direct Lettuce client: Synchronous store and retrieve Order using Kryo")
+    void testDirectLettuceStoreAndRetrieveOrder() {
+        String key = "test:lettuce:order:" + UUID.randomUUID();
         Order order = new Order(
                 "ORD-" + UUID.randomUUID(),
                 888L,
                 List.of(
-                        new OrderItem("P1", "Spring in Action", 1, new BigDecimal("45.00")),
-                        new OrderItem("P2", "Redis in Action", 2, new BigDecimal("39.95"))
+                        new OrderItem("P1", "Spring Boot 4 in Action", 1, new BigDecimal("45.00")),
+                        new OrderItem("P2", "Redis & Lettuce High Performance", 2, new BigDecimal("39.95"))
                 ),
                 "PLACED",
                 new BigDecimal("124.90"),
                 LocalDateTime.now()
         );
 
-        // 1. Store via Spring RedisTemplate
-        springKryoService.set(key, order);
-        assertTrue(springKryoService.hasKey(key));
+        // 1. Store via Direct Lettuce
+        String setResult = lettuceKryoService.set(key, order);
+        assertEquals("OK", setResult);
+        assertTrue(lettuceKryoService.exists(key));
 
-        // 2. Retrieve via Spring RedisTemplate
-        Order retrieved = springKryoService.get(key, Order.class);
+        // 2. Retrieve via Direct Lettuce
+        Order retrieved = lettuceKryoService.get(key, Order.class);
         assertNotNull(retrieved);
         assertEquals(order, retrieved);
         assertEquals(order.getTotalAmount(), retrieved.getTotalAmount());
         assertEquals(2, retrieved.getItems().size());
 
         // 3. Clean up
-        springKryoService.delete(key);
-        assertFalse(springKryoService.hasKey(key));
+        lettuceKryoService.delete(key);
+        assertFalse(lettuceKryoService.exists(key));
     }
 
     @Test
-    @DisplayName("Test asynchronous Lettuce operations with Kryo")
+    @DisplayName("Test direct Lettuce client: Asynchronous non-blocking operations with Kryo")
     void testAsyncLettuceOperations() throws Exception {
         String key = "test:lettuce:async:" + UUID.randomUUID();
         UserProfile user = new UserProfile(
@@ -119,5 +116,6 @@ public class LettuceKryoIntegrationTest {
         assertEquals(user, retrieved);
 
         lettuceKryoService.delete(key);
+        assertFalse(lettuceKryoService.exists(key));
     }
 }

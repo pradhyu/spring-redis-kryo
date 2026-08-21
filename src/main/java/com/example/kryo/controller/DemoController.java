@@ -4,7 +4,6 @@ import com.example.kryo.model.Order;
 import com.example.kryo.model.OrderItem;
 import com.example.kryo.model.UserProfile;
 import com.example.kryo.service.LettuceKryoDirectService;
-import com.example.kryo.service.SpringDataRedisKryoService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,14 +20,11 @@ import java.util.Map;
 public class DemoController {
 
     private final LettuceKryoDirectService lettuceKryoService;
-    private final SpringDataRedisKryoService springKryoService;
     private final com.example.kryo.config.KryoPoolHolder kryoPoolHolder;
 
     public DemoController(LettuceKryoDirectService lettuceKryoService,
-                          SpringDataRedisKryoService springKryoService,
                           com.example.kryo.config.KryoPoolHolder kryoPoolHolder) {
         this.lettuceKryoService = lettuceKryoService;
-        this.springKryoService = springKryoService;
         this.kryoPoolHolder = kryoPoolHolder;
     }
 
@@ -54,22 +50,23 @@ public class DemoController {
                 LocalDateTime.now()
         );
 
-        // 2. Direct Lettuce store & retrieve
+        // 2. Direct Lettuce store & retrieve (UserProfile)
         String userKey = "demo:user:" + user.getId();
         lettuceKryoService.set(userKey, user);
         UserProfile retrievedUser = lettuceKryoService.get(userKey, UserProfile.class);
 
-        // 3. Spring Data RedisTemplate store & retrieve
+        // 3. Direct Lettuce store & retrieve (Order)
         String orderKey = "demo:order:" + order.getOrderId();
-        springKryoService.set(orderKey, order);
-        Order retrievedOrder = springKryoService.get(orderKey, Order.class);
+        lettuceKryoService.set(orderKey, order);
+        Order retrievedOrder = lettuceKryoService.get(orderKey, Order.class);
 
         // 4. Raw bytes inspection
         byte[] userRawBytes = lettuceKryoService.getRawBytes(userKey);
+        byte[] orderRawBytes = lettuceKryoService.getRawBytes(orderKey);
 
         return ResponseEntity.ok(Map.of(
                 "status", "SUCCESS",
-                "lettuceDirect", Map.of(
+                "lettuceDirectUser", Map.of(
                         "key", userKey,
                         "stored", user,
                         "retrieved", retrievedUser,
@@ -77,11 +74,13 @@ public class DemoController {
                         "rawByteSize", userRawBytes != null ? userRawBytes.length : 0,
                         "rawHex", userRawBytes != null ? HexFormat.of().formatHex(userRawBytes) : ""
                 ),
-                "springDataRedis", Map.of(
+                "lettuceDirectOrder", Map.of(
                         "key", orderKey,
                         "stored", order,
                         "retrieved", retrievedOrder,
-                        "match", order.equals(retrievedOrder)
+                        "match", order.equals(retrievedOrder),
+                        "rawByteSize", orderRawBytes != null ? orderRawBytes.length : 0,
+                        "rawHex", orderRawBytes != null ? HexFormat.of().formatHex(orderRawBytes) : ""
                 )
         ));
     }
@@ -90,7 +89,7 @@ public class DemoController {
     public ResponseEntity<String> saveUser(@RequestBody UserProfile user) {
         String key = "user:" + user.getId();
         lettuceKryoService.set(key, user);
-        return ResponseEntity.ok("Saved UserProfile to Redis key: " + key);
+        return ResponseEntity.ok("Saved UserProfile via Direct Lettuce to Redis key: " + key);
     }
 
     @GetMapping("/users/{id}")
@@ -106,14 +105,14 @@ public class DemoController {
     @PostMapping("/orders")
     public ResponseEntity<String> saveOrder(@RequestBody Order order) {
         String key = "order:" + order.getOrderId();
-        springKryoService.set(key, order);
-        return ResponseEntity.ok("Saved Order to Redis key: " + key);
+        lettuceKryoService.set(key, order);
+        return ResponseEntity.ok("Saved Order via Direct Lettuce to Redis key: " + key);
     }
 
     @GetMapping("/orders/{id}")
     public ResponseEntity<Order> getOrder(@PathVariable String id) {
         String key = "order:" + id;
-        Order order = springKryoService.get(key, Order.class);
+        Order order = lettuceKryoService.get(key, Order.class);
         if (order == null) {
             return ResponseEntity.notFound().build();
         }

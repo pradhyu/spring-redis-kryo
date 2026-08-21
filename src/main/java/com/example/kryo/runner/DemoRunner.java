@@ -4,7 +4,6 @@ import com.example.kryo.model.Order;
 import com.example.kryo.model.OrderItem;
 import com.example.kryo.model.UserProfile;
 import com.example.kryo.service.LettuceKryoDirectService;
-import com.example.kryo.service.SpringDataRedisKryoService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -24,23 +23,20 @@ public class DemoRunner implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(DemoRunner.class);
 
     private final LettuceKryoDirectService lettuceKryoService;
-    private final SpringDataRedisKryoService springKryoService;
 
-    public DemoRunner(LettuceKryoDirectService lettuceKryoService,
-                      SpringDataRedisKryoService springKryoService) {
+    public DemoRunner(LettuceKryoDirectService lettuceKryoService) {
         this.lettuceKryoService = lettuceKryoService;
-        this.springKryoService = springKryoService;
     }
 
     @Override
     public void run(String... args) {
         System.out.println("\n================================================================================");
-        System.out.println(">>> STARTING LETTUCE + KRYO SERIALIZATION DEMONSTRATION <<<");
+        System.out.println(">>> STARTING DIRECT LETTUCE + KRYO 5 DEMONSTRATION <<<");
         System.out.println("================================================================================\n");
 
         try {
             // -------------------------------------------------------------------------
-            // 1. Prepare sample complex objects
+            // 1. Prepare sample domain objects
             // -------------------------------------------------------------------------
             UserProfile user = new UserProfile(
                     1001L,
@@ -66,37 +62,37 @@ public class DemoRunner implements CommandLineRunner {
             );
 
             // -------------------------------------------------------------------------
-            // 2. DEMO 1: Pure Lettuce Client with Custom KryoRedisCodec
+            // 2. DEMO 1: Synchronous Direct Lettuce Storage & Retrieval (UserProfile)
             // -------------------------------------------------------------------------
-            System.out.println("--- [TEST 1] Pure Lettuce Client with KryoRedisCodec ---");
-            String lettuceKey = "lettuce:user:" + user.getId();
+            System.out.println("--- [TEST 1] Direct Lettuce Synchronous SET / GET (UserProfile) ---");
+            String userKey = "lettuce:user:" + user.getId();
 
-            System.out.println("1. Storing UserProfile into Redis at key: " + lettuceKey);
-            lettuceKryoService.set(lettuceKey, user);
+            System.out.println("1. Storing UserProfile into Redis at key: " + userKey);
+            lettuceKryoService.set(userKey, user);
 
             System.out.println("2. Retrieving UserProfile from Redis via Lettuce...");
-            UserProfile retrievedUser = lettuceKryoService.get(lettuceKey, UserProfile.class);
+            UserProfile retrievedUser = lettuceKryoService.get(userKey, UserProfile.class);
 
             System.out.println("   -> Retrieved Object: " + retrievedUser);
             boolean userEquals = user.equals(retrievedUser);
             System.out.println("   -> Object Equality Verified: " + (userEquals ? "✓ PASSED (Exact Match)" : "✗ FAILED"));
 
             // Inspect the raw binary stored in Redis
-            byte[] rawBytes = lettuceKryoService.getRawBytes(lettuceKey);
-            System.out.println("   -> Raw binary size in Redis: " + rawBytes.length + " bytes");
-            System.out.println("   -> Raw binary hex preview: " + HexFormat.of().formatHex(rawBytes, 0, Math.min(32, rawBytes.length)) + "...");
+            byte[] userRawBytes = lettuceKryoService.getRawBytes(userKey);
+            System.out.println("   -> Raw binary size in Redis: " + userRawBytes.length + " bytes");
+            System.out.println("   -> Raw binary hex preview: " + HexFormat.of().formatHex(userRawBytes, 0, Math.min(32, userRawBytes.length)) + "...");
 
             // -------------------------------------------------------------------------
-            // 3. DEMO 2: Spring Data RedisTemplate + KryoRedisSerializer
+            // 3. DEMO 2: Synchronous Direct Lettuce Storage & Retrieval (Order)
             // -------------------------------------------------------------------------
-            System.out.println("\n--- [TEST 2] Spring Data RedisTemplate + KryoRedisSerializer ---");
-            String springKey = "spring:order:" + order.getOrderId();
+            System.out.println("\n--- [TEST 2] Direct Lettuce Synchronous SET / GET (Order with BigDecimal & Dates) ---");
+            String orderKey = "lettuce:order:" + order.getOrderId();
 
-            System.out.println("1. Storing Order into Redis at key: " + springKey);
-            springKryoService.set(springKey, order);
+            System.out.println("1. Storing Order into Redis at key: " + orderKey);
+            lettuceKryoService.set(orderKey, order);
 
-            System.out.println("2. Retrieving Order from Redis via RedisTemplate...");
-            Order retrievedOrder = springKryoService.get(springKey, Order.class);
+            System.out.println("2. Retrieving Order from Redis via Lettuce...");
+            Order retrievedOrder = lettuceKryoService.get(orderKey, Order.class);
 
             System.out.println("   -> Retrieved Order ID: " + retrievedOrder.getOrderId());
             System.out.println("   -> Retrieved Items Count: " + retrievedOrder.getItems().size());
@@ -105,9 +101,9 @@ public class DemoRunner implements CommandLineRunner {
             System.out.println("   -> Object Equality Verified: " + (orderEquals ? "✓ PASSED (Exact Match)" : "✗ FAILED"));
 
             // -------------------------------------------------------------------------
-            // 4. DEMO 3: Asynchronous Operations with Lettuce + Kryo
+            // 4. DEMO 3: Asynchronous Non-blocking Operations with Lettuce + Kryo
             // -------------------------------------------------------------------------
-            System.out.println("\n--- [TEST 3] Lettuce Asynchronous Non-blocking Kryo Operations ---");
+            System.out.println("\n--- [TEST 3] Direct Lettuce Non-blocking Async Pipeline ---");
             String asyncKey = "lettuce:async:order:" + order.getOrderId();
 
             CompletableFuture<Void> asyncChain = lettuceKryoService.setAsync(asyncKey, order)
@@ -124,7 +120,7 @@ public class DemoRunner implements CommandLineRunner {
             asyncChain.join();
 
             System.out.println("\n================================================================================");
-            System.out.println(">>> ALL LETTUCE + KRYO SERIALIZATION DEMONSTRATIONS COMPLETED SUCCESSFULLY! <<<");
+            System.out.println(">>> DIRECT LETTUCE + KRYO DEMONSTRATIONS COMPLETED SUCCESSFULLY! <<<");
             System.out.println("================================================================================\n");
 
         } catch (Exception e) {

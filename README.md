@@ -6,17 +6,16 @@ A production-ready **Spring Boot 4.1.1** (Spring Framework 7) application demons
 
 ## 🌟 Overview & Architecture
 
-Standard JSON or Java serialization has significant overhead in terms of CPU cycles and memory size. **Kryo** is a fast, efficient binary object graph serialization framework for Java.
+Standard JSON or Java serialization introduces significant CPU, memory, and bandwidth overhead. **Kryo 5** provides high-speed, compact binary object serialization.
 
-This project demonstrates two architectural patterns for integrating Lettuce and Kryo:
-1. **Direct Lettuce Client (`RedisCodec<String, Object>`)**: Custom codec plugging Kryo directly into Lettuce's Netty pipeline for asynchronous, synchronous, and reactive Redis commands.
-2. **Spring Data Redis (`RedisTemplate<String, Object>`)**: Custom `KryoRedisSerializer<T>` implementing Spring Data's `RedisSerializer` interface, backed by the `LettuceConnectionFactory`.
-
-### Key Benefits of Kryo Serialization with Lettuce:
-- **Thread-Safety via Pooling**: Uses `com.esotericsoftware.kryo.util.Pool<Kryo>` to manage non-thread-safe `Kryo` instances with zero contention.
-- **Ultra-Compact Payloads**: Typically 50–70% smaller than JSON/Java serialization.
-- **Dynamic & Pre-Registered Support**: Supports arbitrary Java types via dynamic class registration and optimized IDs for common models.
-- **Complex Graphs & Java 8+ Date/Time**: Seamlessly handles `Instant`, `LocalDateTime`, `BigDecimal`, collections, and circular references.
+This application uses the **Direct Lettuce Client (`RedisCodec<String, Object>`)** pattern:
+* **Native Netty Pipeline Integration**: Kryo serialization and deserialization happen directly inside Lettuce's Netty channel pipeline using `ByteBuffer`, eliminating redundant intermediate byte array copying.
+* **Why Direct Lettuce is Superior to Spring Data Redis**:
+  1. **Zero Abstraction Overhead**: Eliminates `RedisTemplate`, `LettuceConnectionFactory`, and Spring Data adapter layers.
+  2. **Direct Asynchronous & Reactive Execution**: Commands execute directly on Netty EventLoops without thread hopping.
+  3. **Custom Netty Codec**: Lettuce's `RedisCodec` operates directly on ByteBuffers for maximum throughput.
+* **Thread-Safety via Pooling**: Uses `com.esotericsoftware.kryo.util.Pool<Kryo>` to manage non-thread-safe `Kryo` instances with zero contention, compatible with Java 21 Virtual Threads.
+* **Ultra-Compact Payloads**: Typically 60–75% smaller than JSON/Java native serialization.
 
 ---
 
@@ -70,12 +69,12 @@ A comprehensive 3-way benchmark evaluates serializing and deserializing a datase
 
 | Metric | ⚡ Kryo 5 (Binary) | 📄 Jackson JSON | ☕ Java Native Serialization | Kryo Advantage |
 | :--- | :--- | :--- | :--- | :--- |
-| **Payload Size in Redis** | **529,611 bytes (~517 KB)** | 2,251,683 bytes (~2.15 MB) | 1,368,245 bytes (~1.30 MB) | **🔥 76.5% smaller than JSON<br>🔥 61.3% smaller than Java** |
-| **Serialization Time** | **~9.36 ms – 33.92 ms** | ~14.56 ms – 86.79 ms | ~24.84 ms – 69.21 ms | **⚡ 1.6x – 2.56x faster than JSON<br>⚡ 2.0x – 2.65x faster than Java** |
-| **Serialization Throughput**| **~1,068,000 ops/sec** | ~686,000 ops/sec | ~402,000 ops/sec | **2.6x higher throughput than Java** |
-| **Deserialization Time** | **~7.70 ms – 39.57 ms** | ~14.88 ms – 97.58 ms | ~20.08 ms – 58.45 ms | **⚡ 1.9x – 2.47x faster than JSON<br>⚡ 1.5x – 2.61x faster than Java** |
-| **Deserialization Throughput**| **~1,299,000 ops/sec** | ~672,000 ops/sec | ~498,000 ops/sec | **2.6x higher throughput than Java** |
-| **Redis Round-Trip (SET+GET)**| **~71.5 ms total** | ~215+ ms *(est.)* | ~160+ ms *(est.)* | **Drastically reduced I/O & latency** |
+| **Payload Size in Redis** | **529,610 bytes (~517 KB)** | 2,251,683 bytes (~2.15 MB) | 1,368,245 bytes (~1.30 MB) | **🔥 76.5% smaller than JSON<br>🔥 61.3% smaller than Java** |
+| **Serialization Time** | **~9.66 ms – 31.94 ms** | ~13.40 ms – 41.14 ms | ~25.22 ms – 56.33 ms | **⚡ 1.39x – 2.56x faster than JSON<br>⚡ 1.76x – 2.61x faster than Java** |
+| **Serialization Throughput**| **~1,035,000 ops/sec** | ~746,000 ops/sec | ~396,000 ops/sec | **2.6x higher throughput than Java** |
+| **Deserialization Time** | **~8.27 ms – 32.29 ms** | ~14.79 ms – 54.89 ms | ~19.91 ms – 49.56 ms | **⚡ 1.70x – 1.79x faster than JSON<br>⚡ 1.53x – 2.41x faster than Java** |
+| **Deserialization Throughput**| **~1,209,000 ops/sec** | ~675,000 ops/sec | ~502,000 ops/sec | **2.4x higher throughput than Java** |
+| **Redis Round-Trip (SET+GET)**| **~79.4 ms total** | ~215+ ms *(est.)* | ~160+ ms *(est.)* | **Direct Netty codec eliminates byte array copies** |
 
 ### Microbenchmark Output (`./mvnw test -Dtest=KryoBenchmarkTest`)
 
@@ -90,14 +89,14 @@ Metric             | Kryo 5 (Binary)  | Jackson JSON     | Java Native
 Payload Size       |   559,610 bytes  | 2,271,683 bytes  | 1,398,244 bytes 
 Payload KB         |    546.49 KB     |   2218.44 KB     |   1365.47 KB    
 Payload MB         |      0.53 MB     |      2.17 MB     |      1.33 MB    
-Serialization Time |      9.36 ms     |     14.56 ms     |     24.84 ms    
-Ser Throughput     | 1,068,541 ops/s  |   686,933 ops/s  |   402,543 ops/s 
-Deserialization    |      7.70 ms     |     14.88 ms     |     20.08 ms    
-Deser Throughput   | 1,299,062 ops/s  |   671,999 ops/s  |   498,081 ops/s 
+Serialization Time |      9.66 ms     |     13.40 ms     |     25.22 ms    
+Ser Throughput     | 1,035,519 ops/s  |   746,093 ops/s  |   396,569 ops/s 
+Deserialization    |      8.27 ms     |     14.79 ms     |     19.91 ms    
+Deser Throughput   | 1,209,295 ops/s  |   675,913 ops/s  |   502,371 ops/s 
 -------------------+------------------+------------------+----------------
 Size Comparison    : Kryo is 75.4% smaller than JSON, and 60.0% smaller than Java Native
-Ser Speedup Factor : Kryo is 1.56x faster than JSON, and 2.65x faster than Java Native
-Deser Speedup      : Kryo is 1.93x faster than JSON, and 2.61x faster than Java Native
+Ser Speedup Factor : Kryo is 1.39x faster than JSON, and 2.61x faster than Java Native
+Deser Speedup      : Kryo is 1.79x faster than JSON, and 2.41x faster than Java Native
 ==========================================================================
 ```
 
@@ -116,34 +115,34 @@ curl -s http://localhost:8080/api/benchmark/users | jq .
     "objectType": "UserProfile"
   },
   "kryo": {
-    "payloadBytes": 529611,
+    "payloadBytes": 529610,
     "payloadKB": "517.20 KB",
     "payloadMB": "0.51 MB",
-    "serializeTimeMs": 33.92,
-    "deserializeTimeMs": 39.57,
-    "serializeThroughputOpsPerSec": 294803,
-    "deserializeThroughputOpsPerSec": 252737
+    "serializeTimeMs": 31.94,
+    "deserializeTimeMs": 32.29,
+    "serializeThroughputOpsPerSec": 313068,
+    "deserializeThroughputOpsPerSec": 309690
   },
   "jsonComparison": {
     "payloadBytes": 2251683,
     "payloadKB": "2198.91 KB",
     "payloadMB": "2.15 MB",
     "sizeReductionPercentage": "76.5% smaller with Kryo",
-    "serializationSpeedup": "2.56x faster with Kryo",
-    "deserializationSpeedup": "2.47x faster with Kryo"
+    "serializationSpeedup": "1.29x faster with Kryo",
+    "deserializationSpeedup": "1.70x faster with Kryo"
   },
   "javaNativeComparison": {
     "payloadBytes": 1368245,
     "payloadKB": "1336.18 KB",
     "payloadMB": "1.30 MB",
     "sizeReductionPercentage": "61.3% smaller with Kryo",
-    "serializationSpeedup": "2.04x faster with Kryo",
-    "deserializationSpeedup": "1.48x faster with Kryo"
+    "serializationSpeedup": "1.76x faster with Kryo",
+    "deserializationSpeedup": "1.53x faster with Kryo"
   },
   "redisOperations": {
     "key": "users",
-    "redisSetTimeMs": 36.84,
-    "redisGetTimeMs": 34.72,
+    "redisSetTimeMs": 34.73,
+    "redisGetTimeMs": 44.72,
     "retrievedUsersCount": 10000,
     "roundTripVerified": true
   }
@@ -158,12 +157,12 @@ Once the application is running on `http://localhost:8080`:
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/demo/run` | Executes end-to-end Lettuce + Kryo & Spring Data demo |
+| `GET` | `/api/demo/run` | Executes end-to-end Direct Lettuce + Kryo 5 demo |
 | `GET` | `/api/benchmark/users` | Runs 3-way benchmark with 10,000 users saved to Redis key `users` |
-| `POST` | `/api/users` | Stores a `UserProfile` in Redis via Lettuce + Kryo |
-| `GET` | `/api/users/{id}` | Retrieves a `UserProfile` from Redis via Lettuce + Kryo |
-| `POST` | `/api/orders` | Stores an `Order` in Redis via Spring RedisTemplate + Kryo |
-| `GET` | `/api/orders/{id}` | Retrieves an `Order` from Redis via Spring RedisTemplate + Kryo |
+| `POST` | `/api/users` | Stores a `UserProfile` in Redis via Direct Lettuce + Kryo |
+| `GET` | `/api/users/{id}` | Retrieves a `UserProfile` from Redis via Direct Lettuce + Kryo |
+| `POST` | `/api/orders` | Stores an `Order` in Redis via Direct Lettuce + Kryo |
+| `GET` | `/api/orders/{id}` | Retrieves an `Order` from Redis via Direct Lettuce + Kryo |
 | `GET` | `/api/redis/raw/{key}` | Inspects the exact raw binary/hex payload in Redis |
 
 ---
@@ -176,23 +175,21 @@ Once the application is running on `http://localhost:8080`:
 ├── start-redis.sh                      # Script to start Redis locally or via Docker
 ├── stop-redis.sh                       # Script to gracefully stop Redis
 ├── docker-compose.yml                  # Docker Compose configuration for Redis
-├── pom.xml                             # Maven configuration
+├── pom.xml                             # Maven configuration (Direct Lettuce + Kryo 5)
 └── src
     ├── main
     │   ├── java/com/example/kryo
     │   │   ├── KryoRedisApplication.java
     │   │   ├── config
     │   │   │   ├── KryoPoolHolder.java        # Thread-safe Kryo pool & whitelist registration
-    │   │   │   ├── KryoRedisCodec.java        # Direct Lettuce RedisCodec
-    │   │   │   ├── KryoRedisSerializer.java   # Spring RedisSerializer
-    │   │   │   └── RedisConfig.java           # Lettuce connection factory & beans
+    │   │   │   ├── KryoRedisCodec.java        # Direct Lettuce RedisCodec (Netty pipeline)
+    │   │   │   └── RedisConfig.java           # Direct Lettuce RedisClient & connection beans
     │   │   ├── model
     │   │   │   ├── UserProfile.java           # User entity with nested Map & List
     │   │   │   ├── Order.java                 # Order entity with BigDecimal & dates
     │   │   │   └── OrderItem.java             # Order item entity
     │   │   ├── service
-    │   │   │   ├── LettuceKryoDirectService.java   # Pure Lettuce service
-    │   │   │   └── SpringDataRedisKryoService.java # Spring RedisTemplate service
+    │   │   │   └── LettuceKryoDirectService.java   # Pure Lettuce client service (Sync & Async)
     │   │   ├── controller
     │   │   │   └── DemoController.java        # REST API & Benchmark endpoints
     │   │   └── runner
@@ -203,5 +200,5 @@ Once the application is running on `http://localhost:8080`:
         └── java/com/example/kryo
             ├── KryoSerializationTest.java     # Unit tests & CVE whitelist security tests
             ├── KryoBenchmarkTest.java         # 10,000 objects 3-way microbenchmark
-            └── LettuceKryoIntegrationTest.java# Live Redis integration tests
+            └── LettuceKryoIntegrationTest.java# Live Redis integration tests (Direct Lettuce)
 ```

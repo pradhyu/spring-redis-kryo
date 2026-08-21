@@ -1,3 +1,5 @@
 /target
 /.redis.log
 /.redis.pid
+dump.rdb
+

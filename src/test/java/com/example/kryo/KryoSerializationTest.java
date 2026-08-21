@@ -2,7 +2,6 @@ package com.example.kryo;
 
 import com.example.kryo.config.KryoPoolHolder;
 import com.example.kryo.config.KryoRedisCodec;
-import com.example.kryo.config.KryoRedisSerializer;
 import com.example.kryo.model.Order;
 import com.example.kryo.model.OrderItem;
 import com.example.kryo.model.UserProfile;
@@ -23,13 +22,11 @@ public class KryoSerializationTest {
 
     private KryoPoolHolder kryoPoolHolder;
     private KryoRedisCodec kryoRedisCodec;
-    private KryoRedisSerializer<Object> kryoRedisSerializer;
 
     @BeforeEach
     void setUp() {
         kryoPoolHolder = new KryoPoolHolder();
         kryoRedisCodec = new KryoRedisCodec(kryoPoolHolder);
-        kryoRedisSerializer = new KryoRedisSerializer<>(kryoPoolHolder);
     }
 
     @Test
@@ -98,23 +95,6 @@ public class KryoSerializationTest {
         assertNotNull(decoded);
         assertInstanceOf(UserProfile.class, decoded);
         assertEquals(user, decoded);
-    }
-
-    @Test
-    @DisplayName("Should serialize and deserialize with Spring Data KryoRedisSerializer")
-    void testSpringDataKryoSerializer() {
-        UserProfile user = new UserProfile(
-                777L, "spring_user", "spring@io.com", true,
-                List.of("ROLE_DEV"),
-                Map.of("framework", "spring-boot"),
-                Instant.now()
-        );
-
-        byte[] serialized = kryoRedisSerializer.serialize(user);
-        assertNotNull(serialized);
-
-        Object deserialized = kryoRedisSerializer.deserialize(serialized);
-        assertEquals(user, deserialized);
     }
 
     @Test

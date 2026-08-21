@@ -130,4 +130,31 @@ public class KryoSerializationTest {
         assertEquals(0, buffer.remaining());
         assertNull(kryoRedisCodec.decodeValue(null));
     }
+
+    // Custom unregistered dummy class for security test
+    static class UnregisteredMaliciousPayload {
+        private String command = "calc.exe";
+    }
+
+    @Test
+    @DisplayName("Security: Should reject unregistered classes when registrationRequired is true")
+    void testUnregisteredClassRejection() {
+        UnregisteredMaliciousPayload payload = new UnregisteredMaliciousPayload();
+
+        RuntimeException exception = assertThrows(
+                RuntimeException.class,
+                () -> kryoPoolHolder.serialize(payload),
+                "Should throw RuntimeException wrapping IllegalArgumentException for unregistered class"
+        );
+
+        assertNotNull(exception.getCause(), "Must have an underlying cause");
+        assertTrue(
+                exception.getCause().getMessage().contains("Class is not registered"),
+                "Underlying cause message must state 'Class is not registered'"
+        );
+        assertTrue(
+                exception.getMessage().contains("Kryo serialization failed"),
+                "Error message should indicate serialization failure"
+        );
+    }
 }

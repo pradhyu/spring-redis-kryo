@@ -33,20 +33,71 @@ public class KryoPoolHolder {
             @Override
             protected Kryo create() {
                 Kryo kryo = new Kryo();
-                // Allow serializing classes even if not explicitly registered
-                kryo.setRegistrationRequired(false);
+                // Enforce strict whitelist security mode to prevent deserialization vulnerabilities (CVEs / RCE)
+                kryo.setRegistrationRequired(true);
                 // Support circular references and duplicate object graph references
                 kryo.setReferences(true);
 
-                // Pre-register domain models and common types for smaller binary size & faster performance
+                // Add JDK 8+ java.time serializers (Instant, LocalDateTime, LocalDate, etc.)
+                com.esotericsoftware.kryo.serializers.TimeSerializers.addDefaultSerializers(kryo);
+
+                // 1. Domain Models (Assigned fixed IDs: 10-19)
                 kryo.register(UserProfile.class, 10);
                 kryo.register(Order.class, 11);
                 kryo.register(OrderItem.class, 12);
-                kryo.register(BigDecimal.class, 13);
-                kryo.register(Instant.class, 14);
-                kryo.register(LocalDateTime.class, 15);
-                kryo.register(ArrayList.class, 16);
-                kryo.register(HashMap.class, 17);
+
+                // 2. Common Java Standard Types (Assigned fixed IDs: 20-29)
+                kryo.register(BigDecimal.class, new com.esotericsoftware.kryo.serializers.DefaultSerializers.BigDecimalSerializer(), 20);
+                kryo.register(Instant.class, 21);
+                kryo.register(LocalDateTime.class, 22);
+                kryo.register(java.time.LocalDate.class, 23);
+                kryo.register(java.time.LocalTime.class, 24);
+                kryo.register(java.util.UUID.class, new com.esotericsoftware.kryo.Serializer<java.util.UUID>() {
+                    @Override
+                    public void write(Kryo k, Output o, java.util.UUID u) {
+                        o.writeLong(u.getMostSignificantBits());
+                        o.writeLong(u.getLeastSignificantBits());
+                    }
+
+                    @Override
+                    public java.util.UUID read(Kryo k, Input i, Class<? extends java.util.UUID> type) {
+                        return new java.util.UUID(i.readLong(), i.readLong());
+                    }
+                }, 25);
+
+                // 3. Mutable Java Collections (Assigned fixed IDs: 30-39)
+                kryo.register(ArrayList.class, 30);
+                kryo.register(java.util.LinkedList.class, 31);
+                kryo.register(HashMap.class, 32);
+                kryo.register(java.util.LinkedHashMap.class, 33);
+                kryo.register(java.util.HashSet.class, 34);
+                kryo.register(java.util.LinkedHashSet.class, 35);
+                kryo.register(java.util.TreeMap.class, 36);
+                kryo.register(java.util.TreeSet.class, 37);
+
+                // 4. Arrays (Assigned fixed IDs: 40-49)
+                kryo.register(String[].class, 40);
+                kryo.register(Object[].class, 41);
+
+                // 5. java.util.Collections Helpers (Assigned fixed IDs: 50-59)
+                kryo.register(java.util.Collections.emptyList().getClass(), 50);
+                kryo.register(java.util.Collections.emptyMap().getClass(), 51);
+                kryo.register(java.util.Collections.emptySet().getClass(), 52);
+                kryo.register(java.util.Collections.singletonList("").getClass(), 53);
+                kryo.register(java.util.Collections.singletonMap("", "").getClass(), 54);
+                kryo.register(java.util.Collections.singleton("").getClass(), 55);
+                kryo.register(java.util.Arrays.asList("").getClass(), 56);
+
+                // 6. Java 9+ Immutable Collections (List.of, Map.of, Set.of) (Assigned fixed IDs: 60-69)
+                kryo.register(java.util.List.of().getClass(), 60);                  // List0
+                kryo.register(java.util.List.of("a").getClass(), 61);               // List12
+                kryo.register(java.util.List.of("a", "b", "c").getClass(), 62);    // ListN
+                kryo.register(java.util.Set.of().getClass(), 63);                   // Set0
+                kryo.register(java.util.Set.of("a").getClass(), 64);                // Set12
+                kryo.register(java.util.Set.of("a", "b", "c").getClass(), 65);     // SetN
+                kryo.register(java.util.Map.of().getClass(), 66);                   // Map0
+                kryo.register(java.util.Map.of("k", "v").getClass(), 67);           // Map1
+                kryo.register(java.util.Map.of("k1", "v1", "k2", "v2").getClass(), 68); // MapN
 
                 return kryo;
             }

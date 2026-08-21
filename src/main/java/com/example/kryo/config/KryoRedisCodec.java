@@ -25,7 +25,7 @@ public class KryoRedisCodec implements RedisCodec<String, Object> {
     @Override
     public ByteBuffer encodeKey(String key) {
         if (key == null) {
-            return ByteBuffer.wrap(new byte[0]);
+            throw new IllegalArgumentException("Redis key must not be null");
         }
         return ByteBuffer.wrap(key.getBytes(charset));
     }

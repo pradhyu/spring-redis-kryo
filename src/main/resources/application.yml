@@ -4,17 +4,18 @@ spring:
   threads:
     virtual:
       enabled: true
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      timeout: 3000ms
-      lettuce:
-        pool:
-          max-active: 16
-          max-idle: 8
-          min-idle: 2
-          max-wait: 2000ms
+
+# Direct Lettuce Redis connection (no Spring Data Redis)
+redis:
+  host: ${REDIS_HOST:localhost}
+  port: ${REDIS_PORT:6379}
+  timeout: 3s
+
+# Kryo serialization pool configuration
+kryo:
+  pool-size: 64
+  output-buffer-size: 16384
+  schema-version: 1
 
 server:
   port: 8080

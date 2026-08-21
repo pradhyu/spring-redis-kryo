@@ -23,7 +23,7 @@ public class KryoBenchmarkTest {
 
     @BeforeEach
     void setUp() {
-        kryoPoolHolder = new KryoPoolHolder();
+        kryoPoolHolder = new KryoPoolHolder(64, 16384, 1);
         objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
     }

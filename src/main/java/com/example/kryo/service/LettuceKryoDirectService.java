@@ -1,11 +1,9 @@
 package com.example.kryo.service;
 
-import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisFuture;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.async.RedisAsyncCommands;
 import io.lettuce.core.api.sync.RedisCommands;
-import io.lettuce.core.codec.ByteArrayCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -21,14 +19,15 @@ public class LettuceKryoDirectService {
 
     private static final Logger log = LoggerFactory.getLogger(LettuceKryoDirectService.class);
 
-    private final RedisClient redisClient;
     private final StatefulRedisConnection<String, Object> connection;
+    private final StatefulRedisConnection<byte[], byte[]> rawConnection;
     private final RedisCommands<String, Object> syncCommands;
     private final RedisAsyncCommands<String, Object> asyncCommands;
 
-    public LettuceKryoDirectService(RedisClient redisClient, StatefulRedisConnection<String, Object> connection) {
-        this.redisClient = redisClient;
+    public LettuceKryoDirectService(StatefulRedisConnection<String, Object> connection,
+                                     StatefulRedisConnection<byte[], byte[]> rawConnection) {
         this.connection = connection;
+        this.rawConnection = rawConnection;
         this.syncCommands = connection.sync();
         this.asyncCommands = connection.async();
     }
@@ -37,7 +36,7 @@ public class LettuceKryoDirectService {
      * Store an object synchronously into Redis using Lettuce + Kryo.
      */
     public String set(String key, Object value) {
-        log.info("[Direct Lettuce] Setting key='{}' with object type: {}", key, value.getClass().getSimpleName());
+        log.debug("[Direct Lettuce] Setting key='{}' type={}", key, value.getClass().getSimpleName());
         return syncCommands.set(key, value);
     }
 
@@ -45,7 +44,7 @@ public class LettuceKryoDirectService {
      * Store an object with TTL synchronously.
      */
     public String setEx(String key, long seconds, Object value) {
-        log.info("[Direct Lettuce] Setting key='{}' with TTL={}s", key, seconds);
+        log.debug("[Direct Lettuce] Setting key='{}' with TTL={}s", key, seconds);
         return syncCommands.setex(key, seconds, value);
     }
 
@@ -53,7 +52,7 @@ public class LettuceKryoDirectService {
      * Retrieve an object synchronously from Redis using Lettuce + Kryo.
      */
     public Object get(String key) {
-        log.info("[Direct Lettuce] Getting key='{}'", key);
+        log.debug("[Direct Lettuce] Getting key='{}'", key);
         return syncCommands.get(key);
     }
 
@@ -102,10 +101,9 @@ public class LettuceKryoDirectService {
 
     /**
      * Inspect raw bytes directly stored in Redis to verify Kryo binary encoding.
+     * Uses a shared, reused connection (no TCP connection leak).
      */
     public byte[] getRawBytes(String key) {
-        try (var rawConn = redisClient.connect(ByteArrayCodec.INSTANCE)) {
-            return rawConn.sync().get(key.getBytes(StandardCharsets.UTF_8));
-        }
+        return rawConnection.sync().get(key.getBytes(StandardCharsets.UTF_8));
     }
 }

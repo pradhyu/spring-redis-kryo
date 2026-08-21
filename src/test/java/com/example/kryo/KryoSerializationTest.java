@@ -2,6 +2,7 @@ package com.example.kryo;
 
 import com.example.kryo.config.KryoPoolHolder;
 import com.example.kryo.config.KryoRedisCodec;
+import com.example.kryo.config.KryoSerializationException;
 import com.example.kryo.model.Order;
 import com.example.kryo.model.OrderItem;
 import com.example.kryo.model.UserProfile;
@@ -25,7 +26,7 @@ public class KryoSerializationTest {
 
     @BeforeEach
     void setUp() {
-        kryoPoolHolder = new KryoPoolHolder();
+        kryoPoolHolder = new KryoPoolHolder(64, 16384, 1);
         kryoRedisCodec = new KryoRedisCodec(kryoPoolHolder);
     }
 
@@ -121,10 +122,10 @@ public class KryoSerializationTest {
     void testUnregisteredClassRejection() {
         UnregisteredMaliciousPayload payload = new UnregisteredMaliciousPayload();
 
-        RuntimeException exception = assertThrows(
-                RuntimeException.class,
+        KryoSerializationException exception = assertThrows(
+                KryoSerializationException.class,
                 () -> kryoPoolHolder.serialize(payload),
-                "Should throw RuntimeException wrapping IllegalArgumentException for unregistered class"
+                "Should throw KryoSerializationException for unregistered class"
         );
 
         assertNotNull(exception.getCause(), "Must have an underlying cause");
@@ -137,4 +138,46 @@ public class KryoSerializationTest {
                 "Error message should indicate serialization failure"
         );
     }
+
+    @Test
+    @DisplayName("Schema: First byte of serialized payload should be the schema version")
+    void testSchemaVersionPrefix() {
+        UserProfile user = new UserProfile(
+                999L, "schema_test", "schema@test.io", true,
+                List.of("ROLE_USER"), Map.of("key", "val"), Instant.now()
+        );
+
+        byte[] bytes = kryoPoolHolder.serialize(user);
+        assertEquals(1, bytes[0], "First byte should be schema version 1");
+    }
+
+    @Test
+    @DisplayName("Schema: Should reject payload with wrong schema version")
+    void testSchemaVersionMismatch() {
+        UserProfile user = new UserProfile(
+                888L, "version_test", "v@test.io", true,
+                List.of("ROLE_USER"), Map.of("k", "v"), Instant.now()
+        );
+
+        byte[] bytes = kryoPoolHolder.serialize(user);
+        // Corrupt the schema version byte
+        bytes[0] = 99;
+
+        assertThrows(
+                KryoSerializationException.SchemaVersionMismatchException.class,
+                () -> kryoPoolHolder.deserialize(bytes),
+                "Should throw SchemaVersionMismatchException for wrong version byte"
+        );
+    }
+
+    @Test
+    @DisplayName("Codec: Should reject null key with IllegalArgumentException")
+    void testNullKeyRejection() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> kryoRedisCodec.encodeKey(null),
+                "Should throw IllegalArgumentException for null key"
+        );
+    }
 }
+

@@ -3,6 +3,7 @@ package com.example.kryo.config;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
+import io.lettuce.core.codec.ByteArrayCodec;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,11 +17,14 @@ import java.time.Duration;
 @Configuration
 public class RedisConfig {
 
-    @Value("${spring.data.redis.host:localhost}")
+    @Value("${redis.host:localhost}")
     private String redisHost;
 
-    @Value("${spring.data.redis.port:6379}")
+    @Value("${redis.port:6379}")
     private int redisPort;
+
+    @Value("${redis.timeout:3s}")
+    private Duration redisTimeout;
 
     /**
      * 1. Standalone Lettuce RedisClient
@@ -30,7 +34,7 @@ public class RedisConfig {
         RedisURI redisURI = RedisURI.builder()
                 .withHost(redisHost)
                 .withPort(redisPort)
-                .withTimeout(Duration.ofSeconds(3))
+                .withTimeout(redisTimeout)
                 .build();
         return RedisClient.create(redisURI);
     }
@@ -42,5 +46,14 @@ public class RedisConfig {
     public StatefulRedisConnection<String, Object> lettuceKryoConnection(RedisClient redisClient,
                                                                          KryoRedisCodec kryoRedisCodec) {
         return redisClient.connect(kryoRedisCodec);
+    }
+
+    /**
+     * 3. Dedicated raw byte connection for binary inspection (reused, not per-call).
+     * Fixes the TCP connection leak where a new connection was opened on every getRawBytes() call.
+     */
+    @Bean(destroyMethod = "close")
+    public StatefulRedisConnection<byte[], byte[]> rawByteConnection(RedisClient redisClient) {
+        return redisClient.connect(ByteArrayCodec.INSTANCE);
     }
 }

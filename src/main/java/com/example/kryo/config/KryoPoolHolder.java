@@ -7,6 +7,7 @@ import com.esotericsoftware.kryo.util.Pool;
 import com.example.kryo.model.Order;
 import com.example.kryo.model.OrderItem;
 import com.example.kryo.model.UserProfile;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
@@ -21,15 +22,29 @@ import java.util.HashMap;
  * Thread-safe Kryo instance pool and serialization helper.
  * Kryo instances are not thread-safe, so pooling guarantees safe concurrent access
  * while maximizing performance by reusing Kryo instances and buffers.
+ *
+ * <p>Configuration is externalized via application.yml under the {@code kryo.*} namespace:
+ * <ul>
+ *   <li>{@code kryo.pool-size} — max pooled Kryo instances (default 64)</li>
+ *   <li>{@code kryo.output-buffer-size} — initial Output buffer in bytes (default 16384)</li>
+ *   <li>{@code kryo.schema-version} — version byte prepended to every payload (default 1)</li>
+ * </ul>
  */
 @Component
 public class KryoPoolHolder {
 
     private final Pool<Kryo> kryoPool;
+    private final int outputBufferSize;
+    private final byte schemaVersion;
 
-    public KryoPoolHolder() {
+    public KryoPoolHolder(@Value("${kryo.pool-size:64}") int poolSize,
+                          @Value("${kryo.output-buffer-size:16384}") int outputBufferSize,
+                          @Value("${kryo.schema-version:1}") int schemaVersion) {
+        this.outputBufferSize = outputBufferSize;
+        this.schemaVersion = (byte) schemaVersion;
+
         // Pool with maximum capacity and dynamic expansion
-        this.kryoPool = new Pool<Kryo>(true, false, 64) {
+        this.kryoPool = new Pool<Kryo>(true, false, poolSize) {
             @Override
             protected Kryo create() {
                 Kryo kryo = new Kryo();
@@ -106,6 +121,7 @@ public class KryoPoolHolder {
 
     /**
      * Serializes any Java object into a Kryo byte array.
+     * The first byte is always the schema version tag for forward/backward compatibility.
      */
     public byte[] serialize(Object object) {
         if (object == null) {
@@ -113,13 +129,18 @@ public class KryoPoolHolder {
         }
 
         Kryo kryo = kryoPool.obtain();
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
-             Output output = new Output(baos, 4096)) {
-            kryo.writeClassAndObject(output, object);
-            output.flush();
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            // Prepend schema version byte before Kryo payload
+            baos.write(schemaVersion);
+            try (Output output = new Output(baos, outputBufferSize)) {
+                kryo.writeClassAndObject(output, object);
+                output.flush();
+            }
             return baos.toByteArray();
+        } catch (KryoSerializationException e) {
+            throw e;
         } catch (Exception e) {
-            throw new RuntimeException("Kryo serialization failed for: " + object.getClass().getName(), e);
+            throw new KryoSerializationException("Kryo serialization failed for: " + object.getClass().getName(), e);
         } finally {
             kryoPool.free(kryo);
         }
@@ -127,6 +148,7 @@ public class KryoPoolHolder {
 
     /**
      * Deserializes a Kryo byte array back into an Object.
+     * Validates the schema version byte before attempting deserialization.
      */
     @SuppressWarnings("unchecked")
     public <T> T deserialize(byte[] bytes) {
@@ -134,12 +156,19 @@ public class KryoPoolHolder {
             return null;
         }
 
+        // Validate schema version prefix
+        byte version = bytes[0];
+        if (version != schemaVersion) {
+            throw new KryoSerializationException.SchemaVersionMismatchException(schemaVersion, version);
+        }
+
         Kryo kryo = kryoPool.obtain();
-        try (ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
-             Input input = new Input(bais)) {
+        try (Input input = new Input(bytes, 1, bytes.length - 1)) {
             return (T) kryo.readClassAndObject(input);
+        } catch (KryoSerializationException e) {
+            throw e;
         } catch (Exception e) {
-            throw new RuntimeException("Kryo deserialization failed", e);
+            throw new KryoSerializationException("Kryo deserialization failed", e);
         } finally {
             kryoPool.free(kryo);
         }
@@ -162,5 +191,9 @@ public class KryoPoolHolder {
 
     public Pool<Kryo> getKryoPool() {
         return kryoPool;
+    }
+
+    public byte getSchemaVersion() {
+        return schemaVersion;
     }
 }
